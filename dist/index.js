@@ -96,7 +96,7 @@ function writeExpr(expr, type, w) {
         const elem = arrayElementType(type);
         return [
             `${w}.beginArray(${expr}.size());`,
-            `for (${boxedJavaType(elem)} _e : ${expr}) { ${w}.nextElement(); ${writeExpr("_e", elem, w)}; }`,
+            `for (${boxedJavaType(elem)} item : ${expr}) { ${w}.nextElement(); ${writeExpr("item", elem, w)}; }`,
             `${w}.endArray();`,
         ].join("\n        ");
     }
@@ -104,7 +104,7 @@ function writeExpr(expr, type, w) {
         const elem = recordElementType(type);
         return [
             `${w}.beginObject(${expr}.size());`,
-            `for (java.util.Map.Entry<String, ${boxedJavaType(elem)}> _entry : ${expr}.entrySet()) { ${w}.writeField(_entry.getKey()); ${writeExpr("_entry.getValue()", elem, w)}; }`,
+            `for (java.util.Map.Entry<String, ${boxedJavaType(elem)}> entry : ${expr}.entrySet()) { ${w}.writeField(entry.getKey()); ${writeExpr("entry.getValue()", elem, w)}; }`,
             `${w}.endObject();`,
         ].join("\n        ");
     }
@@ -189,10 +189,10 @@ function generateModelCode(m) {
     // Private write function
     lines.push(`    private static void _write${m.name}(SpecWriter w, ${m.name} obj) {`);
     if (optionalFields.length > 0) {
-        lines.push(`        int _n = ${requiredFields.length};`);
+        lines.push(`        int fieldCount = ${requiredFields.length};`);
         for (const f of optionalFields)
-            lines.push(`        if (obj.${f.name}() != null) _n++;`);
-        lines.push(`        w.beginObject(_n);`);
+            lines.push(`        if (obj.${f.name}() != null) fieldCount++;`);
+        lines.push(`        w.beginObject(fieldCount);`);
     }
     else {
         lines.push(`        w.beginObject(${fields.length});`);
@@ -219,10 +219,10 @@ function generateModelCode(m) {
     // Local variables for decode
     for (const f of fields) {
         if (f.optional || isModelType(f.type)) {
-            lines.push(`        ${boxedJavaType(f.type)} _${f.name} = null;`);
+            lines.push(`        ${boxedJavaType(f.type)} ${f.name}Val = null;`);
         }
         else {
-            lines.push(`        ${typeToJava(f.type)} _${f.name} = ${defaultValue(f.type)};`);
+            lines.push(`        ${typeToJava(f.type)} ${f.name}Val = ${defaultValue(f.type)};`);
         }
     }
     lines.push(`        r.beginObject();`);
@@ -230,7 +230,7 @@ function generateModelCode(m) {
     lines.push(`            switch (r.readFieldName()) {`);
     for (const f of fields) {
         lines.push(`                case "${f.name}":`);
-        const readLines = generateFieldRead(f, "r", `_${f.name}`, "                    ");
+        const readLines = generateFieldRead(f, "r", `${f.name}Val`, "                    ");
         lines.push(readLines);
     }
     lines.push(`                default: r.skip(); break;`);
@@ -238,7 +238,7 @@ function generateModelCode(m) {
     lines.push(`        }`);
     lines.push(`        r.endObject();`);
     // Constructor
-    const ctorArgs = fields.map(f => `_${f.name}`).join(", ");
+    const ctorArgs = fields.map(f => `${f.name}Val`).join(", ");
     lines.push(`        return new ${m.name}(${ctorArgs});`);
     lines.push(`    }`);
     return lines.join("\n");
@@ -268,38 +268,38 @@ function generateArrayRead(type, r, targetVar, indent) {
     const javaElem = boxedJavaType(elem);
     const lines = [];
     lines.push(`${indent}{`);
-    lines.push(`${indent}    java.util.ArrayList<${javaElem}> _tmp = new java.util.ArrayList<>();`);
+    lines.push(`${indent}    java.util.ArrayList<${javaElem}> values = new java.util.ArrayList<>();`);
     lines.push(`${indent}    ${r}.beginArray();`);
     lines.push(`${indent}    while (${r}.hasNextElement()) {`);
     if (isArrayType(elem)) {
         const inner = arrayElementType(elem);
         const innerIndent = indent + "        ";
-        lines.push(`${innerIndent}java.util.ArrayList<${boxedJavaType(inner)}> _inner = new java.util.ArrayList<>();`);
+        lines.push(`${innerIndent}java.util.ArrayList<${boxedJavaType(inner)}> innerValues = new java.util.ArrayList<>();`);
         lines.push(`${innerIndent}${r}.beginArray();`);
         lines.push(`${innerIndent}while (${r}.hasNextElement()) {`);
-        lines.push(`${innerIndent}    _inner.add(${readExprSimple(inner, r)});`);
+        lines.push(`${innerIndent}    innerValues.add(${readExprSimple(inner, r)});`);
         lines.push(`${innerIndent}}`);
         lines.push(`${innerIndent}${r}.endArray();`);
-        lines.push(`${innerIndent}_tmp.add(_inner);`);
+        lines.push(`${innerIndent}values.add(innerValues);`);
     }
     else if (isRecordType(elem)) {
         const inner = recordElementType(elem);
         const innerIndent = indent + "        ";
-        lines.push(`${innerIndent}java.util.HashMap<String, ${boxedJavaType(inner)}> _inner = new java.util.HashMap<>();`);
+        lines.push(`${innerIndent}java.util.HashMap<String, ${boxedJavaType(inner)}> innerValues = new java.util.HashMap<>();`);
         lines.push(`${innerIndent}${r}.beginObject();`);
         lines.push(`${innerIndent}while (${r}.hasNextField()) {`);
-        lines.push(`${innerIndent}    String _k = ${r}.readFieldName();`);
-        lines.push(`${innerIndent}    _inner.put(_k, ${readExprSimple(inner, r)});`);
+        lines.push(`${innerIndent}    String key = ${r}.readFieldName();`);
+        lines.push(`${innerIndent}    innerValues.put(key, ${readExprSimple(inner, r)});`);
         lines.push(`${innerIndent}}`);
         lines.push(`${innerIndent}${r}.endObject();`);
-        lines.push(`${innerIndent}_tmp.add(_inner);`);
+        lines.push(`${innerIndent}values.add(innerValues);`);
     }
     else {
-        lines.push(`${indent}        _tmp.add(${readExprSimple(elem, r)});`);
+        lines.push(`${indent}        values.add(${readExprSimple(elem, r)});`);
     }
     lines.push(`${indent}    }`);
     lines.push(`${indent}    ${r}.endArray();`);
-    lines.push(`${indent}    ${targetVar} = _tmp;`);
+    lines.push(`${indent}    ${targetVar} = values;`);
     lines.push(`${indent}}`);
     return lines.join("\n");
 }
@@ -308,41 +308,41 @@ function generateRecordRead(type, r, targetVar, indent) {
     const javaElem = boxedJavaType(elem);
     const lines = [];
     lines.push(`${indent}{`);
-    lines.push(`${indent}    java.util.HashMap<String, ${javaElem}> _tmp = new java.util.HashMap<>();`);
+    lines.push(`${indent}    java.util.HashMap<String, ${javaElem}> values = new java.util.HashMap<>();`);
     lines.push(`${indent}    ${r}.beginObject();`);
     lines.push(`${indent}    while (${r}.hasNextField()) {`);
     if (isArrayType(elem)) {
         const inner = arrayElementType(elem);
         const innerIndent = indent + "        ";
-        lines.push(`${innerIndent}String _k = ${r}.readFieldName();`);
-        lines.push(`${innerIndent}java.util.ArrayList<${boxedJavaType(inner)}> _inner = new java.util.ArrayList<>();`);
+        lines.push(`${innerIndent}String key = ${r}.readFieldName();`);
+        lines.push(`${innerIndent}java.util.ArrayList<${boxedJavaType(inner)}> innerValues = new java.util.ArrayList<>();`);
         lines.push(`${innerIndent}${r}.beginArray();`);
         lines.push(`${innerIndent}while (${r}.hasNextElement()) {`);
-        lines.push(`${innerIndent}    _inner.add(${readExprSimple(inner, r)});`);
+        lines.push(`${innerIndent}    innerValues.add(${readExprSimple(inner, r)});`);
         lines.push(`${innerIndent}}`);
         lines.push(`${innerIndent}${r}.endArray();`);
-        lines.push(`${innerIndent}_tmp.put(_k, _inner);`);
+        lines.push(`${innerIndent}values.put(key, innerValues);`);
     }
     else if (isRecordType(elem)) {
         const inner = recordElementType(elem);
         const innerIndent = indent + "        ";
-        lines.push(`${innerIndent}String _k = ${r}.readFieldName();`);
-        lines.push(`${innerIndent}java.util.HashMap<String, ${boxedJavaType(inner)}> _inner = new java.util.HashMap<>();`);
+        lines.push(`${innerIndent}String key = ${r}.readFieldName();`);
+        lines.push(`${innerIndent}java.util.HashMap<String, ${boxedJavaType(inner)}> innerValues = new java.util.HashMap<>();`);
         lines.push(`${innerIndent}${r}.beginObject();`);
         lines.push(`${innerIndent}while (${r}.hasNextField()) {`);
-        lines.push(`${innerIndent}    String _k2 = ${r}.readFieldName();`);
-        lines.push(`${innerIndent}    _inner.put(_k2, ${readExprSimple(inner, r)});`);
+        lines.push(`${innerIndent}    String innerKey = ${r}.readFieldName();`);
+        lines.push(`${innerIndent}    innerValues.put(innerKey, ${readExprSimple(inner, r)});`);
         lines.push(`${innerIndent}}`);
         lines.push(`${innerIndent}${r}.endObject();`);
-        lines.push(`${innerIndent}_tmp.put(_k, _inner);`);
+        lines.push(`${innerIndent}values.put(key, innerValues);`);
     }
     else {
-        lines.push(`${indent}        String _k = ${r}.readFieldName();`);
-        lines.push(`${indent}        _tmp.put(_k, ${readExprSimple(elem, r)});`);
+        lines.push(`${indent}        String key = ${r}.readFieldName();`);
+        lines.push(`${indent}        values.put(key, ${readExprSimple(elem, r)});`);
     }
     lines.push(`${indent}    }`);
     lines.push(`${indent}    ${r}.endObject();`);
-    lines.push(`${indent}    ${targetVar} = _tmp;`);
+    lines.push(`${indent}    ${targetVar} = values;`);
     lines.push(`${indent}}`);
     return lines.join("\n");
 }
