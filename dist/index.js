@@ -1,5 +1,39 @@
-import { emitFile, } from "@typespec/compiler";
-import { collectServices, extractFields, scalarName, isArrayType, isRecordType, isModelType, arrayElementType, recordElementType, dottedPathToSnakeCase, dottedPathToPascalCase, checkAndReportReservedKeywords, } from "@specodec/typespec-emitter-core";
+import { emitFile } from "@typespec/compiler";
+import { collectServices, extractFields, scalarName, isArrayType, isRecordType, isModelType, isUnionType, arrayElementType, recordElementType, dottedPathToSnakeCase, dottedPathToPascalCase, toPascalCase, toCamelCase, safeFieldName, checkAndReportReservedKeywords, } from "@specodec/typespec-emitter-core";
+let javaCurNs = "";
+let javaModelNs = new Map();
+function javaContainerClass(ns) {
+    return dottedPathToPascalCase(ns) + "Types";
+}
+function javaIsCrossPkg(type) {
+    const name = (type.kind === "Model" || type.kind === "Enum" || type.kind === "Union") ? type.name : null;
+    if (!name)
+        return false;
+    const ns = javaModelNs.get(name);
+    return !!ns && ns !== javaCurNs;
+}
+function javaTypeName(type) {
+    if (type.kind === "Model") {
+        const name = type.name || "Object";
+        const pfx = javaIsCrossPkg(type) ? javaContainerClass(javaModelNs.get(name)) + "." : "";
+        return pfx + name;
+    }
+    return "Object";
+}
+function javaWriteCodecRef(type) {
+    if (type.kind !== "Model" || !type.name)
+        return "/* unknown model */";
+    const name = type.name;
+    const pfx = javaIsCrossPkg(type) ? javaContainerClass(javaModelNs.get(name)) + "." : "";
+    return `${pfx}${name}Codec.encode().encode`;
+}
+function javaReadCodecRef(type) {
+    if (type.kind !== "Model" || !type.name)
+        return "/* unknown model */";
+    const name = type.name;
+    const pfx = javaIsCrossPkg(type) ? javaContainerClass(javaModelNs.get(name)) + "." : "";
+    return `${pfx}${name}Codec.decode().decode`;
+}
 // ─── Type mapping ─────────────────────────────────────────────────────────────
 function boxedJavaType(type) {
     if (isArrayType(type))
@@ -9,26 +43,43 @@ function boxedJavaType(type) {
     const n = scalarName(type);
     if (n) {
         switch (n) {
-            case "string": return "String";
-            case "boolean": return "Boolean";
-            case "int8": return "Byte";
-            case "int16": return "Short";
+            case "string":
+                return "String";
+            case "boolean":
+                return "Boolean";
+            case "int8":
+                return "Byte";
+            case "int16":
+                return "Short";
             case "int32":
-            case "integer": return "Integer";
-            case "int64": return "Long";
-            case "uint8": return "Byte";
-            case "uint16": return "Short";
-            case "uint32": return "Integer";
-            case "uint64": return "Long";
-            case "float32": return "Float";
+            case "integer":
+                return "Integer";
+            case "int64":
+                return "Long";
+            case "uint8":
+                return "Byte";
+            case "uint16":
+                return "Short";
+            case "uint32":
+                return "Integer";
+            case "uint64":
+                return "Long";
+            case "float32":
+                return "Float";
             case "float64":
             case "float":
-            case "decimal": return "Double";
-            case "bytes": return "byte[]";
+            case "decimal":
+                return "Double";
+            case "bytes":
+                return "byte[]";
         }
     }
+    if (type.kind === "Enum")
+        return "String";
     if (type.kind === "Model" && type.name)
-        return type.name || "Object";
+        return javaTypeName(type);
+    if (type.kind === "Union" && type.name)
+        return type.name;
     return "Object";
 }
 function typeToJava(type) {
@@ -39,26 +90,43 @@ function typeToJava(type) {
     const n = scalarName(type);
     if (n) {
         switch (n) {
-            case "string": return "String";
-            case "boolean": return "boolean";
-            case "int8": return "byte";
-            case "int16": return "short";
+            case "string":
+                return "String";
+            case "boolean":
+                return "boolean";
+            case "int8":
+                return "byte";
+            case "int16":
+                return "short";
             case "int32":
-            case "integer": return "int";
-            case "int64": return "long";
-            case "uint8": return "byte";
-            case "uint16": return "short";
-            case "uint32": return "int";
-            case "uint64": return "long";
-            case "float32": return "float";
+            case "integer":
+                return "int";
+            case "int64":
+                return "long";
+            case "uint8":
+                return "byte";
+            case "uint16":
+                return "short";
+            case "uint32":
+                return "int";
+            case "uint64":
+                return "long";
+            case "float32":
+                return "float";
             case "float64":
             case "float":
-            case "decimal": return "double";
-            case "bytes": return "byte[]";
+            case "decimal":
+                return "double";
+            case "bytes":
+                return "byte[]";
         }
     }
+    if (type.kind === "Enum")
+        return "String";
     if (type.kind === "Model" && type.name)
-        return type.name || "Object";
+        return javaTypeName(type);
+    if (type.kind === "Union" && type.name)
+        return type.name;
     return "Object";
 }
 // ─── Default values ───────────────────────────────────────────────────────────
@@ -70,24 +138,37 @@ function defaultValue(type) {
     const n = scalarName(type);
     if (n) {
         switch (n) {
-            case "string": return '""';
-            case "boolean": return "false";
+            case "string":
+                return '""';
+            case "boolean":
+                return "false";
             case "int8":
             case "int16":
             case "int32":
-            case "integer": return "0";
-            case "int64": return "0L";
+            case "integer":
+                return "0";
+            case "int64":
+                return "0L";
             case "uint8":
             case "uint16":
-            case "uint32": return "0";
-            case "uint64": return "0L";
-            case "float32": return "0f";
+            case "uint32":
+                return "0";
+            case "uint64":
+                return "0L";
+            case "float32":
+                return "0f";
             case "float64":
             case "float":
-            case "decimal": return "0.0";
-            case "bytes": return "new byte[0]";
+            case "decimal":
+                return "0.0";
+            case "bytes":
+                return "new byte[0]";
         }
     }
+    if (type.kind === "Enum")
+        return '"";';
+    if (isUnionType(type))
+        return `new ${(type.name)}.${(type.name)}Undefined()`;
     return "null";
 }
 // ─── Write expression ─────────────────────────────────────────────────────────
@@ -111,26 +192,44 @@ function writeExpr(expr, type, w) {
     const n = scalarName(type);
     if (n) {
         switch (n) {
-            case "string": return `${w}.writeString(${expr})`;
-            case "boolean": return `${w}.writeBool(${expr})`;
+            case "string":
+                return `${w}.writeString(${expr})`;
+            case "boolean":
+                return `${w}.writeBool(${expr})`;
             case "int8":
-            case "int16": return `${w}.writeInt32(${expr})`;
+            case "int16":
+                return `${w}.writeInt32(${expr})`;
             case "int32":
-            case "integer": return `${w}.writeInt32(${expr})`;
-            case "int64": return `${w}.writeInt64(${expr})`;
-            case "uint8": return `${w}.writeUint32(${expr} & 0xFF)`;
-            case "uint16": return `${w}.writeUint32(${expr} & 0xFFFF)`;
-            case "uint32": return `${w}.writeUint32(${expr})`;
-            case "uint64": return `${w}.writeUint64(${expr})`;
-            case "float32": return `${w}.writeFloat32(${expr})`;
+            case "integer":
+                return `${w}.writeInt32(${expr})`;
+            case "int64":
+                return `${w}.writeInt64(${expr})`;
+            case "uint8":
+                return `${w}.writeUint32(${expr} & 0xFF)`;
+            case "uint16":
+                return `${w}.writeUint32(${expr} & 0xFFFF)`;
+            case "uint32":
+                return `${w}.writeUint32(${expr})`;
+            case "uint64":
+                return `${w}.writeUint64(${expr})`;
+            case "float32":
+                return `${w}.writeFloat32(${expr})`;
             case "float64":
             case "float":
-            case "decimal": return `${w}.writeFloat64(${expr})`;
-            case "bytes": return `${w}.writeBytes(${expr})`;
+            case "decimal":
+                return `${w}.writeFloat64(${expr})`;
+            case "bytes":
+                return `${w}.writeBytes(${expr})`;
         }
     }
+    if (type.kind === "Enum")
+        return `${w}.writeString(${expr})`;
     if (type.kind === "Model" && type.name)
-        return `_write${type.name}(${w}, ${expr})`;
+        return `${javaWriteCodecRef(type)}(${w}, ${expr})`;
+    if (type.kind === "Union" && type.name) {
+        const un = type.name;
+        return `${un}.write${un}(${w}, ${expr})`;
+    }
     return `// TODO: unknown type`;
 }
 // ─── Simple read expression (scalars and required models) ─────────────────────
@@ -138,34 +237,54 @@ function readExprSimple(type, r) {
     const n = scalarName(type);
     if (n) {
         switch (n) {
-            case "string": return `${r}.readString()`;
-            case "boolean": return `${r}.readBool()`;
-            case "int8": return `(byte) ${r}.readInt32()`;
-            case "int16": return `(short) ${r}.readInt32()`;
+            case "string":
+                return `${r}.readString()`;
+            case "boolean":
+                return `${r}.readBool()`;
+            case "int8":
+                return `(byte) ${r}.readInt32()`;
+            case "int16":
+                return `(short) ${r}.readInt32()`;
             case "int32":
-            case "integer": return `${r}.readInt32()`;
-            case "int64": return `${r}.readInt64()`;
-            case "uint8": return `(byte) ${r}.readUint32()`;
-            case "uint16": return `(short) ${r}.readUint32()`;
-            case "uint32": return `${r}.readUint32()`;
-            case "uint64": return `${r}.readUint64()`;
-            case "float32": return `${r}.readFloat32()`;
+            case "integer":
+                return `${r}.readInt32()`;
+            case "int64":
+                return `${r}.readInt64()`;
+            case "uint8":
+                return `(byte) ${r}.readUint32()`;
+            case "uint16":
+                return `(short) ${r}.readUint32()`;
+            case "uint32":
+                return `${r}.readUint32()`;
+            case "uint64":
+                return `${r}.readUint64()`;
+            case "float32":
+                return `${r}.readFloat32()`;
             case "float64":
             case "float":
-            case "decimal": return `${r}.readFloat64()`;
-            case "bytes": return `${r}.readBytes()`;
+            case "decimal":
+                return `${r}.readFloat64()`;
+            case "bytes":
+                return `${r}.readBytes()`;
         }
     }
+    if (type.kind === "Enum")
+        return `${r}.readString()`;
     if (type.kind === "Model" && type.name) {
-        return `${type.name}Codec.decode().decode(${r})`;
+        return `${javaReadCodecRef(type)}(${r})`;
+    }
+    if (type.kind === "Union" && type.name) {
+        const un = type.name;
+        return `${un}.read${un}(${r})`;
     }
     return `null`;
 }
 // ─── Generate model code ──────────────────────────────────────────────────────
 function generateModelCode(m) {
     const fields = extractFields(m);
-    const optionalFields = fields.filter(f => f.optional);
-    const requiredFields = fields.filter(f => !f.optional);
+    const optionalFields = fields.filter((f) => f.optional);
+    const requiredFields = fields.filter((f) => !f.optional);
+    const javaField = (f) => safeFieldName("java", toCamelCase(f.name));
     const lines = [];
     // Java record declaration
     if (fields.length === 0) {
@@ -177,21 +296,21 @@ function generateModelCode(m) {
             const f = fields[i];
             const comma = i < fields.length - 1 ? "," : "";
             if (f.optional) {
-                lines.push(`        ${boxedJavaType(f.type)} ${f.name}${comma}`);
+                lines.push(`        ${boxedJavaType(f.type)} ${javaField(f)}${comma}`);
             }
             else {
-                lines.push(`        ${typeToJava(f.type)} ${f.name}${comma}`);
+                lines.push(`        ${typeToJava(f.type)} ${javaField(f)}${comma}`);
             }
         }
         lines.push(`    ) {}`);
     }
     lines.push(``);
-    // Private write function
-    lines.push(`    private static void _write${m.name}(SpecWriter w, ${m.name} obj) {`);
+    // Write function
+    lines.push(`    public static void write${m.name}(SpecWriter w, ${m.name} obj) {`);
     if (optionalFields.length > 0) {
         lines.push(`        int fieldCount = ${requiredFields.length};`);
         for (const f of optionalFields)
-            lines.push(`        if (obj.${f.name}() != null) fieldCount++;`);
+            lines.push(`        if (obj.${javaField(f)}() != null) fieldCount++;`);
         lines.push(`        w.beginObject(fieldCount);`);
     }
     else {
@@ -199,10 +318,10 @@ function generateModelCode(m) {
     }
     for (const f of fields) {
         if (f.optional) {
-            lines.push(`        if (obj.${f.name}() != null) { w.writeField("${f.name}"); ${writeExpr(`obj.${f.name}()`, f.type, "w")}; }`);
+            lines.push(`        if (obj.${javaField(f)}() != null) { w.writeField("${f.name}"); ${writeExpr(`obj.${javaField(f)}()`, f.type, "w")}; }`);
         }
         else {
-            lines.push(`        w.writeField("${f.name}"); ${writeExpr(`obj.${f.name}()`, f.type, "w")};`);
+            lines.push(`        w.writeField("${f.name}"); ${writeExpr(`obj.${javaField(f)}()`, f.type, "w")};`);
         }
     }
     lines.push(`        w.endObject();`);
@@ -210,27 +329,33 @@ function generateModelCode(m) {
     lines.push(``);
     // Codec field
     lines.push(`    public static final SpecCodec<${m.name}> ${m.name}Codec = new SpecCodec<>(`);
-    lines.push(`        (w, obj) -> _write${m.name}(w, (${m.name}) obj),`);
-    lines.push(`        r -> _read${m.name}(r)`);
+    lines.push(`        (w, obj) -> write${m.name}(w, (${m.name}) obj),`);
+    lines.push(`        r -> read${m.name}(r)`);
     lines.push(`    );`);
     lines.push(``);
-    // Decode method (extracted to avoid self-reference in initializer)
-    lines.push(`    private static ${m.name} _read${m.name}(SpecReader r) {`);
+    // Decode method
+    lines.push(`    public static ${m.name} read${m.name}(SpecReader r) {`);
     // Local variables for decode
     for (const f of fields) {
+        const fld = toCamelCase(f.name);
         if (f.optional || isModelType(f.type)) {
-            lines.push(`        ${boxedJavaType(f.type)} ${f.name}Val = null;`);
+            lines.push(`        ${boxedJavaType(f.type)} ${fld}Val = null;`);
+        }
+        else if (isUnionType(f.type)) {
+            const unionName = f.type.name;
+            lines.push(`        ${typeToJava(f.type)} ${fld}Val = new ${unionName}.${unionName}Undefined();`);
         }
         else {
-            lines.push(`        ${typeToJava(f.type)} ${f.name}Val = ${defaultValue(f.type)};`);
+            lines.push(`        ${typeToJava(f.type)} ${fld}Val = ${defaultValue(f.type)};`);
         }
     }
     lines.push(`        r.beginObject();`);
     lines.push(`        while (r.hasNextField()) {`);
     lines.push(`            switch (r.readFieldName()) {`);
     for (const f of fields) {
+        const fld = toCamelCase(f.name);
         lines.push(`                case "${f.name}":`);
-        const readLines = generateFieldRead(f, "r", `${f.name}Val`, "                    ");
+        const readLines = generateFieldRead(f, "r", `${fld}Val`, "                    ");
         lines.push(readLines);
     }
     lines.push(`                default: r.skip(); break;`);
@@ -238,7 +363,7 @@ function generateModelCode(m) {
     lines.push(`        }`);
     lines.push(`        r.endObject();`);
     // Constructor
-    const ctorArgs = fields.map(f => `${f.name}Val`).join(", ");
+    const ctorArgs = fields.map((f) => `${toCamelCase(f.name)}Val`).join(", ");
     lines.push(`        return new ${m.name}(${ctorArgs});`);
     lines.push(`    }`);
     return lines.join("\n");
@@ -255,10 +380,10 @@ function generateFieldRead(f, r, targetVar, indent) {
     }
     // For arrays and records, generate block with temp variable
     if (isArrayType(f.type)) {
-        return generateArrayRead(f.type, r, targetVar, indent) + `\n${indent}break;`;
+        return `${generateArrayRead(f.type, r, targetVar, indent)}\n${indent}break;`;
     }
     if (isRecordType(f.type)) {
-        return generateRecordRead(f.type, r, targetVar, indent) + `\n${indent}break;`;
+        return `${generateRecordRead(f.type, r, targetVar, indent)}\n${indent}break;`;
     }
     // Scalars and required models
     return `${indent}${targetVar} = ${readExprSimple(f.type, r)};\n${indent}break;`;
@@ -273,7 +398,7 @@ function generateArrayRead(type, r, targetVar, indent) {
     lines.push(`${indent}    while (${r}.hasNextElement()) {`);
     if (isArrayType(elem)) {
         const inner = arrayElementType(elem);
-        const innerIndent = indent + "        ";
+        const innerIndent = `${indent}        `;
         lines.push(`${innerIndent}java.util.ArrayList<${boxedJavaType(inner)}> innerValues = new java.util.ArrayList<>();`);
         lines.push(`${innerIndent}${r}.beginArray();`);
         lines.push(`${innerIndent}while (${r}.hasNextElement()) {`);
@@ -284,7 +409,7 @@ function generateArrayRead(type, r, targetVar, indent) {
     }
     else if (isRecordType(elem)) {
         const inner = recordElementType(elem);
-        const innerIndent = indent + "        ";
+        const innerIndent = `${indent}        `;
         lines.push(`${innerIndent}java.util.HashMap<String, ${boxedJavaType(inner)}> innerValues = new java.util.HashMap<>();`);
         lines.push(`${innerIndent}${r}.beginObject();`);
         lines.push(`${innerIndent}while (${r}.hasNextField()) {`);
@@ -313,7 +438,7 @@ function generateRecordRead(type, r, targetVar, indent) {
     lines.push(`${indent}    while (${r}.hasNextField()) {`);
     if (isArrayType(elem)) {
         const inner = arrayElementType(elem);
-        const innerIndent = indent + "        ";
+        const innerIndent = `${indent}        `;
         lines.push(`${innerIndent}String key = ${r}.readFieldName();`);
         lines.push(`${innerIndent}java.util.ArrayList<${boxedJavaType(inner)}> innerValues = new java.util.ArrayList<>();`);
         lines.push(`${innerIndent}${r}.beginArray();`);
@@ -325,7 +450,7 @@ function generateRecordRead(type, r, targetVar, indent) {
     }
     else if (isRecordType(elem)) {
         const inner = recordElementType(elem);
-        const innerIndent = indent + "        ";
+        const innerIndent = `${indent}        `;
         lines.push(`${innerIndent}String key = ${r}.readFieldName();`);
         lines.push(`${innerIndent}java.util.HashMap<String, ${boxedJavaType(inner)}> innerValues = new java.util.HashMap<>();`);
         lines.push(`${innerIndent}${r}.beginObject();`);
@@ -346,6 +471,56 @@ function generateRecordRead(type, r, targetVar, indent) {
     lines.push(`${indent}}`);
     return lines.join("\n");
 }
+// ─── Generate enum code ────────────────────────────────────────────────────────
+function generateUnionCode(u, L) {
+    const unionName = u.name;
+    const variants = u.variants;
+    const variantName = (v) => `${unionName}${toPascalCase(v.name)}`;
+    const undefName = `${unionName}Undefined`;
+    const permits = [...variants.map((v) => `${unionName}.${variantName(v)}`), `${unionName}.${undefName}`].join(", ");
+    L.push(`    public sealed interface ${unionName} permits ${permits} {`);
+    for (const v of variants) {
+        const vcName = variantName(v);
+        L.push(`        public record ${vcName}(${typeToJava(v.type)} value) implements ${unionName} {}`);
+    }
+    L.push(`        public record ${undefName}() implements ${unionName} {}`);
+    L.push(``);
+    L.push(`        public static void write${unionName}(SpecWriter w, ${unionName} obj) {`);
+    L.push(`            w.beginObject(1);`);
+    L.push(`            switch (obj) {`);
+    for (const v of variants) {
+        const vcName = variantName(v);
+        const we = writeExpr("v.value()", v.type, "w");
+        L.push(`                case ${unionName}.${vcName} v -> { w.writeField("${v.name}"); ${we}; }`);
+    }
+    L.push(`                default -> throw new RuntimeException("cannot encode Undefined for ${unionName}");`);
+    L.push(`            }`);
+    L.push(`            w.endObject();`);
+    L.push(`        }`);
+    L.push(``);
+    L.push(`        public static ${unionName} read${unionName}(SpecReader r) {`);
+    L.push(`            r.beginObject();`);
+    L.push(`            if (!r.hasNextField()) { r.endObject(); throw new RuntimeException("empty union"); }`);
+    L.push(`            String field = r.readFieldName();`);
+    L.push(`            ${unionName} result = switch (field) {`);
+    for (const v of variants) {
+        const vcName = variantName(v);
+        const re = readExprSimple(v.type, "r");
+        L.push(`                case "${v.name}" -> new ${unionName}.${vcName}(${re});`);
+    }
+    L.push(`                default -> throw new RuntimeException("unknown variant " + field);`);
+    L.push(`            };`);
+    L.push(`            while (r.hasNextField()) { r.readFieldName(); r.skip(); }`);
+    L.push(`            r.endObject();`);
+    L.push(`            return result;`);
+    L.push(`        }`);
+    L.push(`    }`);
+    L.push(``);
+    L.push(`    public static final SpecCodec<${unionName}> ${unionName}Codec = new SpecCodec<>(`);
+    L.push(`        ${unionName}::write${unionName},`);
+    L.push(`        ${unionName}::read${unionName}`);
+    L.push(`    );`);
+}
 // ─── $onEmit ──────────────────────────────────────────────────────────────────
 export async function $onEmit(context) {
     const program = context.program;
@@ -355,27 +530,89 @@ export async function $onEmit(context) {
     if (checkAndReportReservedKeywords(program, services, ignoreReservedKeywords))
         return;
     for (const svc of services) {
-        const pkg = dottedPathToSnakeCase(svc.serviceName);
-        const lines = [];
-        lines.push("// Generated by @specodec/typespec-emitter-java. DO NOT EDIT.");
-        lines.push(`package ${pkg};`);
-        lines.push(``);
-        lines.push(`import java.util.List;`);
-        lines.push(`import java.util.Map;`);
-        lines.push(`import java.util.ArrayList;`);
-        lines.push(`import java.util.HashMap;`);
-        lines.push(`import specodec.*;`);
-        lines.push(``);
-        lines.push(`public class ${dottedPathToPascalCase(svc.serviceName)}Types {`);
-        for (const m of svc.models) {
-            if (!m.name)
-                continue;
-            lines.push(generateModelCode(m));
-            lines.push(``);
+        // Build type → namespace map for cross-package references
+        const modelNs = new Map();
+        for (const s of services) {
+            for (const m of s.models) {
+                if (m.name)
+                    modelNs.set(m.name, s.serviceName);
+            }
+            for (const e of s.enums) {
+                if (e.name)
+                    modelNs.set(e.name, s.serviceName);
+            }
+            for (const u of s.unions) {
+                if (u.name)
+                    modelNs.set(u.name, s.serviceName);
+            }
         }
-        lines.push(`}`);
-        lines.push(``);
-        const fileName = `${dottedPathToPascalCase(svc.serviceName)}Types.java`;
-        await emitFile(program, { path: `${outputDir}/${fileName}`, content: lines.join("\n") });
+        javaModelNs = modelNs;
+        for (const svc of services) {
+            javaCurNs = svc.serviceName;
+            const pkg = dottedPathToSnakeCase(svc.serviceName);
+            const lines = [];
+            // Detect cross-namespace types used by models in this service
+            const xrefNs = new Set();
+            for (const m of svc.models) {
+                if (!m.name)
+                    continue;
+                for (const f of extractFields(m)) {
+                    const collectX = (t) => {
+                        if ((t.kind === "Model" || t.kind === "Enum" || t.kind === "Union") && t.name) {
+                            const ns = modelNs.get(t.name);
+                            if (ns && ns !== svc.serviceName)
+                                xrefNs.add(ns);
+                        }
+                        if (isArrayType(t))
+                            collectX(arrayElementType(t));
+                        if (isRecordType(t))
+                            collectX(recordElementType(t));
+                    };
+                    collectX(f.type);
+                }
+            }
+            for (const u of svc.unions) {
+                for (const v of u.variants) {
+                    const collectX = (t) => {
+                        if ((t.kind === "Model" || t.kind === "Enum" || t.kind === "Union") && t.name) {
+                            const ns = modelNs.get(t.name);
+                            if (ns && ns !== svc.serviceName)
+                                xrefNs.add(ns);
+                        }
+                        if (isArrayType(t))
+                            collectX(arrayElementType(t));
+                        if (isRecordType(t))
+                            collectX(recordElementType(t));
+                    };
+                    collectX(v.type);
+                }
+            }
+            lines.push("// Generated by @specodec/typespec-emitter-java. DO NOT EDIT.");
+            lines.push(`package ${pkg};`);
+            lines.push(``);
+            lines.push(`import java.util.List;`);
+            lines.push(`import java.util.Map;`);
+            lines.push(`import java.util.ArrayList;`);
+            lines.push(`import java.util.HashMap;`);
+            lines.push(`import specodec.*;`);
+            for (const ns of [...xrefNs].sort()) {
+                lines.push(`import ${dottedPathToSnakeCase(ns)}.${dottedPathToPascalCase(ns)}Types;`);
+            }
+            lines.push(``);
+            lines.push(`public class ${dottedPathToPascalCase(svc.serviceName)}Types {`);
+            for (const m of svc.models) {
+                if (!m.name)
+                    continue;
+                lines.push(generateModelCode(m));
+                lines.push(``);
+            }
+            for (const u of svc.unions) {
+                generateUnionCode(u, lines);
+            }
+            lines.push(`}`);
+            lines.push(``);
+            const fileName = `${dottedPathToPascalCase(svc.serviceName)}Types.java`;
+            await emitFile(program, { path: `${outputDir}/${fileName}`, content: lines.join("\n") });
+        }
     }
 }

@@ -1,10 +1,10 @@
 {
   "name": "@specodec/typespec-emitter-java",
   "main": "dist/index.js",
-  "version": "0.1.2",
+  "version": "0.1.18",
   "type": "module",
   "dependencies": {
-    "@specodec/typespec-emitter-core": "^0.1.1",
+    "@specodec/typespec-emitter-core": "^0.1.9",
     "@typespec/compiler": "^1.11.0"
   },
   "scripts": {
@@ -14,5 +14,8 @@
   "types": "dist/index.d.ts",
   "devDependencies": {
     "typescript": "^6.0.3"
+  },
+  "publishConfig": {
+    "registry": "http://10.199.64.20:3000/api/packages/specodec/npm/"
   }
 }
