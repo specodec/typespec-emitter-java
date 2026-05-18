@@ -129,7 +129,7 @@ function typeToJava(type) {
         return type.name;
     return "Object";
 }
-// ─── Default values ───────────────────────────────────────────────────────────
+// ─── Default tmp ───────────────────────────────────────────────────────────
 function defaultValue(type) {
     if (isArrayType(type))
         return "java.util.Collections.emptyList()";
@@ -393,7 +393,7 @@ function generateArrayRead(type, r, targetVar, indent) {
     const javaElem = boxedJavaType(elem);
     const lines = [];
     lines.push(`${indent}{`);
-    lines.push(`${indent}    java.util.ArrayList<${javaElem}> values = new java.util.ArrayList<>();`);
+    lines.push(`${indent}    java.util.ArrayList<${javaElem}> tmp = new java.util.ArrayList<>();`);
     lines.push(`${indent}    ${r}.beginArray();`);
     lines.push(`${indent}    while (${r}.hasNextElement()) {`);
     if (isArrayType(elem)) {
@@ -405,7 +405,7 @@ function generateArrayRead(type, r, targetVar, indent) {
         lines.push(`${innerIndent}    innerValues.add(${readExprSimple(inner, r)});`);
         lines.push(`${innerIndent}}`);
         lines.push(`${innerIndent}${r}.endArray();`);
-        lines.push(`${innerIndent}values.add(innerValues);`);
+        lines.push(`${innerIndent}tmp.add(innerValues);`);
     }
     else if (isRecordType(elem)) {
         const inner = recordElementType(elem);
@@ -417,14 +417,14 @@ function generateArrayRead(type, r, targetVar, indent) {
         lines.push(`${innerIndent}    innerValues.put(key, ${readExprSimple(inner, r)});`);
         lines.push(`${innerIndent}}`);
         lines.push(`${innerIndent}${r}.endObject();`);
-        lines.push(`${innerIndent}values.add(innerValues);`);
+        lines.push(`${innerIndent}tmp.add(innerValues);`);
     }
     else {
-        lines.push(`${indent}        values.add(${readExprSimple(elem, r)});`);
+        lines.push(`${indent}        tmp.add(${readExprSimple(elem, r)});`);
     }
     lines.push(`${indent}    }`);
     lines.push(`${indent}    ${r}.endArray();`);
-    lines.push(`${indent}    ${targetVar} = values;`);
+    lines.push(`${indent}    ${targetVar} = tmp;`);
     lines.push(`${indent}}`);
     return lines.join("\n");
 }
@@ -433,7 +433,7 @@ function generateRecordRead(type, r, targetVar, indent) {
     const javaElem = boxedJavaType(elem);
     const lines = [];
     lines.push(`${indent}{`);
-    lines.push(`${indent}    java.util.HashMap<String, ${javaElem}> values = new java.util.HashMap<>();`);
+    lines.push(`${indent}    java.util.HashMap<String, ${javaElem}> tmp = new java.util.HashMap<>();`);
     lines.push(`${indent}    ${r}.beginObject();`);
     lines.push(`${indent}    while (${r}.hasNextField()) {`);
     if (isArrayType(elem)) {
@@ -446,7 +446,7 @@ function generateRecordRead(type, r, targetVar, indent) {
         lines.push(`${innerIndent}    innerValues.add(${readExprSimple(inner, r)});`);
         lines.push(`${innerIndent}}`);
         lines.push(`${innerIndent}${r}.endArray();`);
-        lines.push(`${innerIndent}values.put(key, innerValues);`);
+        lines.push(`${innerIndent}tmp.put(key, innerValues);`);
     }
     else if (isRecordType(elem)) {
         const inner = recordElementType(elem);
@@ -459,15 +459,15 @@ function generateRecordRead(type, r, targetVar, indent) {
         lines.push(`${innerIndent}    innerValues.put(innerKey, ${readExprSimple(inner, r)});`);
         lines.push(`${innerIndent}}`);
         lines.push(`${innerIndent}${r}.endObject();`);
-        lines.push(`${innerIndent}values.put(key, innerValues);`);
+        lines.push(`${innerIndent}tmp.put(key, innerValues);`);
     }
     else {
         lines.push(`${indent}        String key = ${r}.readFieldName();`);
-        lines.push(`${indent}        values.put(key, ${readExprSimple(elem, r)});`);
+        lines.push(`${indent}        tmp.put(key, ${readExprSimple(elem, r)});`);
     }
     lines.push(`${indent}    }`);
     lines.push(`${indent}    ${r}.endObject();`);
-    lines.push(`${indent}    ${targetVar} = values;`);
+    lines.push(`${indent}    ${targetVar} = tmp;`);
     lines.push(`${indent}}`);
     return lines.join("\n");
 }

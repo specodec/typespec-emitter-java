@@ -149,7 +149,7 @@ function typeToJava(type: Type): string {
   return "Object";
 }
 
-// ─── Default values ───────────────────────────────────────────────────────────
+// ─── Default tmp ───────────────────────────────────────────────────────────
 
 function defaultValue(type: Type): string {
   if (isArrayType(type)) return "java.util.Collections.emptyList()";
@@ -423,7 +423,7 @@ function generateArrayRead(type: Type, r: string, targetVar: string, indent: str
   const lines: string[] = [];
 
   lines.push(`${indent}{`);
-  lines.push(`${indent}    java.util.ArrayList<${javaElem}> values = new java.util.ArrayList<>();`);
+  lines.push(`${indent}    java.util.ArrayList<${javaElem}> tmp = new java.util.ArrayList<>();`);
   lines.push(`${indent}    ${r}.beginArray();`);
   lines.push(`${indent}    while (${r}.hasNextElement()) {`);
 
@@ -436,7 +436,7 @@ function generateArrayRead(type: Type, r: string, targetVar: string, indent: str
     lines.push(`${innerIndent}    innerValues.add(${readExprSimple(inner, r)});`);
     lines.push(`${innerIndent}}`);
     lines.push(`${innerIndent}${r}.endArray();`);
-    lines.push(`${innerIndent}values.add(innerValues);`);
+    lines.push(`${innerIndent}tmp.add(innerValues);`);
   } else if (isRecordType(elem)) {
     const inner = recordElementType(elem)!;
     const innerIndent = `${indent}        `;
@@ -449,14 +449,14 @@ function generateArrayRead(type: Type, r: string, targetVar: string, indent: str
     lines.push(`${innerIndent}    innerValues.put(key, ${readExprSimple(inner, r)});`);
     lines.push(`${innerIndent}}`);
     lines.push(`${innerIndent}${r}.endObject();`);
-    lines.push(`${innerIndent}values.add(innerValues);`);
+    lines.push(`${innerIndent}tmp.add(innerValues);`);
   } else {
-    lines.push(`${indent}        values.add(${readExprSimple(elem, r)});`);
+    lines.push(`${indent}        tmp.add(${readExprSimple(elem, r)});`);
   }
 
   lines.push(`${indent}    }`);
   lines.push(`${indent}    ${r}.endArray();`);
-  lines.push(`${indent}    ${targetVar} = values;`);
+  lines.push(`${indent}    ${targetVar} = tmp;`);
   lines.push(`${indent}}`);
 
   return lines.join("\n");
@@ -468,7 +468,7 @@ function generateRecordRead(type: Type, r: string, targetVar: string, indent: st
   const lines: string[] = [];
 
   lines.push(`${indent}{`);
-  lines.push(`${indent}    java.util.HashMap<String, ${javaElem}> values = new java.util.HashMap<>();`);
+  lines.push(`${indent}    java.util.HashMap<String, ${javaElem}> tmp = new java.util.HashMap<>();`);
   lines.push(`${indent}    ${r}.beginObject();`);
   lines.push(`${indent}    while (${r}.hasNextField()) {`);
 
@@ -482,7 +482,7 @@ function generateRecordRead(type: Type, r: string, targetVar: string, indent: st
     lines.push(`${innerIndent}    innerValues.add(${readExprSimple(inner, r)});`);
     lines.push(`${innerIndent}}`);
     lines.push(`${innerIndent}${r}.endArray();`);
-    lines.push(`${innerIndent}values.put(key, innerValues);`);
+    lines.push(`${innerIndent}tmp.put(key, innerValues);`);
   } else if (isRecordType(elem)) {
     const inner = recordElementType(elem)!;
     const innerIndent = `${indent}        `;
@@ -496,15 +496,15 @@ function generateRecordRead(type: Type, r: string, targetVar: string, indent: st
     lines.push(`${innerIndent}    innerValues.put(innerKey, ${readExprSimple(inner, r)});`);
     lines.push(`${innerIndent}}`);
     lines.push(`${innerIndent}${r}.endObject();`);
-    lines.push(`${innerIndent}values.put(key, innerValues);`);
+    lines.push(`${innerIndent}tmp.put(key, innerValues);`);
   } else {
     lines.push(`${indent}        String key = ${r}.readFieldName();`);
-    lines.push(`${indent}        values.put(key, ${readExprSimple(elem, r)});`);
+    lines.push(`${indent}        tmp.put(key, ${readExprSimple(elem, r)});`);
   }
 
   lines.push(`${indent}    }`);
   lines.push(`${indent}    ${r}.endObject();`);
-  lines.push(`${indent}    ${targetVar} = values;`);
+  lines.push(`${indent}    ${targetVar} = tmp;`);
   lines.push(`${indent}}`);
 
   return lines.join("\n");
