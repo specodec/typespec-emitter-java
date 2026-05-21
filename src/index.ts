@@ -63,7 +63,7 @@ function javaReadCodecRef(type: Type): string {
 
 // ─── Type mapping ─────────────────────────────────────────────────────────────
 
-function boxedJavaType(type: Type): string {
+export function boxedJavaType(type: Type): string {
   if (isArrayType(type)) return `List<${boxedJavaType(arrayElementType(type)!)}>`;
   if (isRecordType(type)) return `Map<String, ${boxedJavaType(recordElementType(type)!)}>`;
   const n = scalarName(type);
@@ -106,7 +106,7 @@ function boxedJavaType(type: Type): string {
   return "Object";
 }
 
-function typeToJava(type: Type): string {
+export function typeToJava(type: Type): string {
   if (isArrayType(type)) return `List<${boxedJavaType(arrayElementType(type)!)}>`;
   if (isRecordType(type)) return `Map<String, ${boxedJavaType(recordElementType(type)!)}>`;
   const n = scalarName(type);
@@ -151,7 +151,7 @@ function typeToJava(type: Type): string {
 
 // ─── Default tmp ───────────────────────────────────────────────────────────
 
-function defaultValue(type: Type): string {
+export function defaultValue(type: Type): string {
   if (isArrayType(type)) return "java.util.Collections.emptyList()";
   if (isRecordType(type)) return "java.util.Collections.emptyMap()";
   const n = scalarName(type);
@@ -191,7 +191,7 @@ function defaultValue(type: Type): string {
 
 // ─── Write expression ─────────────────────────────────────────────────────────
 
-function writeExpr(expr: string, type: Type, w: string): string {
+export function writeExpr(expr: string, type: Type, w: string): string {
   if (isArrayType(type)) {
     const elem = arrayElementType(type)!;
     return [
@@ -249,7 +249,7 @@ function writeExpr(expr: string, type: Type, w: string): string {
 
 // ─── Simple read expression (scalars and required models) ─────────────────────
 
-function readExprSimple(type: Type, r: string): string {
+export function readExprSimple(type: Type, r: string): string {
   const n = scalarName(type);
   if (n) {
     switch (n) {
@@ -297,7 +297,7 @@ function readExprSimple(type: Type, r: string): string {
 
 // ─── Generate model code ──────────────────────────────────────────────────────
 
-function generateModelCode(m: Model): string {
+export function generateModelCode(m: Model): string {
   const fields = extractFields(m);
   const optionalFields = fields.filter((f) => f.optional);
   const requiredFields = fields.filter((f) => !f.optional);
@@ -395,7 +395,7 @@ function generateModelCode(m: Model): string {
 
 // ─── Generate field read code ─────────────────────────────────────────────────
 
-function generateFieldRead(f: FieldInfo, r: string, targetVar: string, indent: string): string {
+export function generateFieldRead(f: FieldInfo, r: string, targetVar: string, indent: string): string {
   // Handle optional model separately (needs isNull check with readNull side-effect)
   if (f.optional && isModelType(f.type)) {
     return [
