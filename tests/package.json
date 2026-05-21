@@ -1,0 +1,7 @@
+{
+  "name": "specodec-emitter-java-tests",
+  "private": true,
+  "dependencies": {
+    "@specodec/typespec-emitter-java": "file:.."
+  }
+}
