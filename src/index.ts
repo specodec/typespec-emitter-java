@@ -290,7 +290,7 @@ export function readExprSimple(type: Type, r: string): string {
   }
   if (type.kind === "Union" && (type as any).name) {
     const un = (type as any).name as string;
-    return `${un}.read${un}(${r})`;
+    return `${un}.decode${un}(${r})`;
   }
   return `null`;
 }
@@ -349,12 +349,12 @@ export function generateModelCode(m: Model): string {
   // Codec field
   lines.push(`    public static final SpecCodec<${m.name}> ${m.name}Codec = new SpecCodec<>(`);
   lines.push(`        (w, obj) -> write${m.name}(w, (${m.name}) obj),`);
-  lines.push(`        r -> read${m.name}(r)`);
+  lines.push(`        r -> decode${m.name}(r)`);
   lines.push(`    );`);
   lines.push(``);
 
   // Decode method
-  lines.push(`    public static ${m.name} read${m.name}(SpecReader r) {`);
+  lines.push(`    public static ${m.name} decode${m.name}(SpecReader r) {`);
 
   // Local variables for decode
   for (const f of fields) {
@@ -541,7 +541,7 @@ function generateUnionCode(u: UnionInfo, L: string[]): void {
   L.push(`            w.endObject();`);
   L.push(`        }`);
   L.push(``);
-  L.push(`        public static ${unionName} read${unionName}(SpecReader r) {`);
+  L.push(`        public static ${unionName} decode${unionName}(SpecReader r) {`);
   L.push(`            r.beginObject();`);
   L.push(`            if (!r.hasNextField()) { r.endObject(); throw new RuntimeException("empty union"); }`);
   L.push(`            String field = r.readFieldName();`);
@@ -561,7 +561,7 @@ function generateUnionCode(u: UnionInfo, L: string[]): void {
   L.push(``);
   L.push(`    public static final SpecCodec<${unionName}> ${unionName}Codec = new SpecCodec<>(`);
   L.push(`        ${unionName}::write${unionName},`);
-  L.push(`        ${unionName}::read${unionName}`);
+  L.push(`        ${unionName}::decode${unionName}`);
   L.push(`    );`);
 }
 

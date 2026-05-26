@@ -1,4 +1,11 @@
-import { type EmitContext } from "@typespec/compiler";
-import { type BaseEmitterOptions } from "@specodec/typespec-emitter-core";
+import { type EmitContext, type Model, type Type } from "@typespec/compiler";
+import { type BaseEmitterOptions, type FieldInfo } from "@specodec/typespec-emitter-core";
 export type EmitterOptions = BaseEmitterOptions;
+export declare function boxedJavaType(type: Type): string;
+export declare function typeToJava(type: Type): string;
+export declare function defaultValue(type: Type): string;
+export declare function writeExpr(expr: string, type: Type, w: string): string;
+export declare function readExprSimple(type: Type, r: string): string;
+export declare function generateModelCode(m: Model): string;
+export declare function generateFieldRead(f: FieldInfo, r: string, targetVar: string, indent: string): string;
 export declare function $onEmit(context: EmitContext<EmitterOptions>): Promise<void>;

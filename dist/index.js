@@ -35,7 +35,7 @@ function javaReadCodecRef(type) {
     return `${pfx}${name}Codec.decode().decode`;
 }
 // ─── Type mapping ─────────────────────────────────────────────────────────────
-function boxedJavaType(type) {
+export function boxedJavaType(type) {
     if (isArrayType(type))
         return `List<${boxedJavaType(arrayElementType(type))}>`;
     if (isRecordType(type))
@@ -82,7 +82,7 @@ function boxedJavaType(type) {
         return type.name;
     return "Object";
 }
-function typeToJava(type) {
+export function typeToJava(type) {
     if (isArrayType(type))
         return `List<${boxedJavaType(arrayElementType(type))}>`;
     if (isRecordType(type))
@@ -130,7 +130,7 @@ function typeToJava(type) {
     return "Object";
 }
 // ─── Default tmp ───────────────────────────────────────────────────────────
-function defaultValue(type) {
+export function defaultValue(type) {
     if (isArrayType(type))
         return "java.util.Collections.emptyList()";
     if (isRecordType(type))
@@ -172,7 +172,7 @@ function defaultValue(type) {
     return "null";
 }
 // ─── Write expression ─────────────────────────────────────────────────────────
-function writeExpr(expr, type, w) {
+export function writeExpr(expr, type, w) {
     if (isArrayType(type)) {
         const elem = arrayElementType(type);
         return [
@@ -233,7 +233,7 @@ function writeExpr(expr, type, w) {
     return `// TODO: unknown type`;
 }
 // ─── Simple read expression (scalars and required models) ─────────────────────
-function readExprSimple(type, r) {
+export function readExprSimple(type, r) {
     const n = scalarName(type);
     if (n) {
         switch (n) {
@@ -280,7 +280,7 @@ function readExprSimple(type, r) {
     return `null`;
 }
 // ─── Generate model code ──────────────────────────────────────────────────────
-function generateModelCode(m) {
+export function generateModelCode(m) {
     const fields = extractFields(m);
     const optionalFields = fields.filter((f) => f.optional);
     const requiredFields = fields.filter((f) => !f.optional);
@@ -369,7 +369,7 @@ function generateModelCode(m) {
     return lines.join("\n");
 }
 // ─── Generate field read code ─────────────────────────────────────────────────
-function generateFieldRead(f, r, targetVar, indent) {
+export function generateFieldRead(f, r, targetVar, indent) {
     // Handle optional model separately (needs isNull check with readNull side-effect)
     if (f.optional && isModelType(f.type)) {
         return [
